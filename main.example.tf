@@ -10,16 +10,6 @@ module "vpc" {
   azs             = data.aws_availability_zones.available.names
 }
 
-module "ecs-cluster" {
-  source       = "./modules/ecs-cluster"
-  cluster_name = "ecs-flask"
-  logs_path    = "/ecs/logs"
-  tags = {
-    Name        = "ecs-flask-cluster"
-    Environment = "dev"
-  }
-}
-
 module "alb-security-group" {
   source      = "./modules/security-group"
   name        = "ecs-flask-sg"
@@ -68,8 +58,18 @@ module "alb" {
   }
 }
 
+module "ecs-cluster" {
+  source       = "./modules/ecs-cluster"
+  cluster_name = "ecs-flask"
+  logs_path    = "/ecs/logs"
+  tags = {
+    Name        = "ecs-flask-cluster"
+    Environment = "dev"
+  }
+}
+
 data "aws_ecr_repository" "expo-ecr" {
-  name = "hms/frontend"
+  name = "my-app"
 }
 
 module "ecs-service" {
@@ -98,4 +98,35 @@ module "ecs-service" {
     Name        = "ecs-flask-service"
     Environment = "dev"
   }
+}
+
+module "expo-s3-bucket" {
+  source         = "./modules/s3-static-website"
+  bucket_name    = "expo-flask-bucket"
+  index_document = "index.html"
+  error_document = "error.html"
+  tags = {
+    Name        = "expo-flask-bucket"
+    Environment = "dev"
+  }
+}
+
+module "cloudfront-distribution" {
+  source              = "./modules/cloudfront-distribution"
+  s3_website_endpoint = module.expo-s3-bucket.website_endpoint
+  aliases             = ["example.com", "www.example.com"]
+  default_root_object = "index.html"
+  price_class         = "PriceClass_100"
+  certificate_arn     = "arn:aws:acm:ap-south-1:123456789012:certificate/your-certificate-id"
+  tags = {
+    Name        = "expo-cloudfront-distribution"
+    Environment = "dev"
+  }
+}
+
+module "bucket_policy" {
+  source      = "./modules/bucket_policy"
+  bucket_arn  = module.expo-s3-bucket.bucket_arn
+  bucket_name = module.expo-s3-bucket.bucket_name
+  oai_iam_arn = module.cloudfront-distribution.oai_iam_arn
 }
